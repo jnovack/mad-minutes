@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mad Minutes</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body { background: #f0f4f8; }
+
+    /* ── Idle state ── */
+    .idle-screen {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    /* ── Action bar ── */
+    .action-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: white;
+      border-bottom: 2px solid #dee2e6;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* ── Worksheet ── */
+    .worksheet {
+      background: white;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 22px 26px 26px;
+      margin: 0 auto;
+      max-width: 980px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.1);
+    }
+
+    .worksheet-header { margin-bottom: 14px; }
+
+    .ws-name-date {
+      display: none;           /* hidden on screen, shown on print */
+      align-items: baseline;
+      gap: 10px;
+      font-size: 1.05rem;
+      margin-bottom: 12px;
+    }
+
+    .ws-name-date .line {
+      flex: 1;
+      border-bottom: 1.5px solid #000;
+      min-width: 80px;
+    }
+
+    /* ── Page separator (screen only) ── */
+    .page-sep {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 28px 0;
+      color: #6c757d;
+      font-size: .85rem;
+      font-weight: 600;
+    }
+    .page-sep::before, .page-sep::after {
+      content: '';
+      flex: 1;
+      border-top: 2px dashed #dee2e6;
+    }
+
+    .ws-title { text-align: center; }
+    .ws-title h1 { font-size: 2.2rem; font-weight: 800; letter-spacing: -1px; margin: 0; }
+    .ws-title .subtitle { font-size: .9rem; color: #666; }
+
+    /* ── Problem grid ── */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+
+    .problem-cell {
+      border: 1.5px solid #adb5bd;
+      border-radius: 6px;
+      padding: 10px 14px 8px;
+      font-family: 'Courier New', Courier, monospace;
+      font-weight: 700;
+      background: #fdfdfd;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      min-height: 132px;
+      font-size: clamp(1.6rem, 2.3vw, 2.5rem);
+      transition: background .25s, border-color .25s;
+    }
+
+    .cell-correct  { background: #d1e7dd !important; border-color: #198754 !important; }
+    .cell-incorrect { background: #f8d7da !important; border-color: #dc3545 !important; }
+
+    .p-number { text-align: right; line-height: 1.2; }
+
+    .p-operator-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      line-height: 1.2;
+    }
+
+    .p-divider {
+      border: none;
+      border-top: 2.5px solid #212529;
+      margin: 5px 0 3px;
+    }
+
+    .answer-input {
+      width: 100%;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: 1.3em;
+      font-weight: inherit;
+      text-align: right;
+      outline: none;
+      color: #0d6efd;
+      padding: 0;
+      line-height: 1.35;
+      caret-color: #0d6efd;
+    }
+
+    .answer-input:focus { background: #eef5ff; border-radius: 3px; }
+    .answer-input:disabled { color: inherit; opacity: 1; -webkit-text-fill-color: inherit; }
+
+    .correct-answer-hint {
+      font-size: .65em;
+      font-weight: 600;
+      color: #198754;
+      text-align: right;
+      line-height: 1;
+      margin-top: 1px;
+    }
+
+    /* ── Timer bar ── */
+    .timer-bar-wrap { flex: 1; max-width: 280px; }
+    .timer-digit {
+      font-family: 'Courier New', monospace;
+      font-weight: 700;
+      font-size: 1.25rem;
+      min-width: 56px;
+      text-align: center;
+    }
+    .timer-urgent { color: #dc3545 !important; animation: pulse .6s ease infinite alternate; }
+    @keyframes pulse { from { opacity: 1; } to { opacity: .4; } }
+
+    /* ── Modal styling ── */
+    .modal-op-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 10px 4px;
+      flex: 1;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+
+    .modal-op-btn i { font-size: 1.2rem; }
+
+    .section-label {
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #6c757d;
+      margin-bottom: 8px;
+    }
+
+    /* ── Seed footer (print only) ── */
+    .ws-seed-footer {
+      display: none;
+      text-align: right;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: .72rem;
+      color: #888;
+      margin-top: 10px;
+    }
+
+    /* ── Print ── */
+    @media print {
+      body { background: white; }
+      .no-print { display: none !important; }
+
+      .worksheet {
+        box-shadow: none;
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        max-width: 100%;
+        margin: 0;
+      }
+
+      .problem-cell {
+        border: 1px solid #555;
+        border-radius: 0;
+        background: white !important;
+        min-height: 110px;
+        font-size: 1.75rem;
+        break-inside: avoid;
+      }
+
+      .cell-correct  { background: #d1e7dd !important; }
+      .cell-incorrect { background: #f8d7da !important; }
+      .answer-input { color: black; }
+      .ws-name-date { display: flex !important; }
+      .page-sep { display: none !important; }
+      .ws-seed-footer { display: block; }
+    }
+
+    .print-page-break { break-before: page; }
+
+    @page { margin: 0.5in; size: portrait; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+  <script>
+    Babel.registerPreset('react-classic', {
+      presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]]
+    });
+  </script>
+
+  <script type="text/babel" data-presets="react-classic">
+    /* ── Seeded PRNG (mulberry32) ── */
+    function mulberry32(seed) {
+      return () => {
+        seed = (seed + 0x6D2B79F5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function randInt(rng, lo, hi) {
+      if (lo >= hi) return lo;
+      return lo + Math.floor(rng() * (hi - lo + 1));
+    }
+
+    /* Returns true if adding/subtracting a and b requires a carry or borrow at any digit column. */
+    function hasCarryOrBorrow(a, b, op) {
+      let x = a, y = b;
+      while (x > 0 || y > 0) {
+        const dx = x % 10, dy = y % 10;
+        if (op === 'add' ? dx + dy > 9 : dx < dy) return true;
+        x = Math.floor(x / 10);
+        y = Math.floor(y / 10);
+      }
+      return false;
+    }
+
+    /* ── Problem generation ── */
+    function genProblem(rng, op, cfg) {
+      const tMin = +cfg.topMin, tMax = Math.max(+cfg.topMin, +cfg.topMax);
+      const bMin = +cfg.botMin, bMax = Math.max(+cfg.botMin, +cfg.botMax);
+
+      switch (op) {
+        case 'add': {
+          for (let attempt = 0; attempt < 60; attempt++) {
+            let a, b;
+            if (cfg.useSumCap) {
+              const cap = +cfg.sumCap;
+              const aHi = Math.min(tMax, cap - bMin);
+              a = aHi >= tMin ? randInt(rng, tMin, aHi) : tMin;
+              const bHi = Math.min(bMax, cap - a);
+              b = bHi >= bMin ? randInt(rng, bMin, bHi) : bMin;
+            } else {
+              a = randInt(rng, tMin, tMax);
+              b = randInt(rng, bMin, bMax);
+            }
+            if (!cfg.noCarry || !hasCarryOrBorrow(a, b, 'add'))
+              return { top: a, bottom: b, sym: '+', answer: a + b };
+          }
+          const fa = randInt(rng, tMin, tMax), fb = randInt(rng, bMin, bMax);
+          return { top: fa, bottom: fb, sym: '+', answer: fa + fb };
+        }
+        case 'sub': {
+          for (let attempt = 0; attempt < 60; attempt++) {
+            let a, b;
+            if (cfg.noNeg) {
+              const aLo = Math.max(tMin, bMin);
+              a = aLo <= tMax ? randInt(rng, aLo, tMax) : Math.max(tMax, bMin);
+              const bHi = Math.min(bMax, a);
+              b = bHi >= bMin ? randInt(rng, bMin, bHi) : a;
+            } else {
+              a = randInt(rng, tMin, tMax);
+              b = randInt(rng, bMin, bMax);
+            }
+            if (!cfg.noCarry || !hasCarryOrBorrow(a, b, 'sub'))
+              return { top: a, bottom: b, sym: '−', answer: a - b };
+          }
+          const fa = randInt(rng, tMin, tMax), fb = randInt(rng, bMin, bMax);
+          return { top: fa, bottom: fb, sym: '−', answer: fa - fb };
+        }
+        case 'mul': {
+          const a = randInt(rng, tMin, tMax);
+          const b = randInt(rng, bMin, bMax);
+          return { top: a, bottom: b, sym: '×', answer: a * b };
+        }
+        case 'div': {
+          const divisor  = randInt(rng, Math.max(1, bMin), Math.max(1, bMax));
+          const quotient = randInt(rng, tMin, tMax);
+          return { top: divisor * quotient, bottom: divisor, sym: '÷', answer: quotient };
+        }
+        default:
+          return { top: 1, bottom: 1, sym: '+', answer: 2 };
+      }
+    }
+
+    /* ── Metadata ── */
+    const DEFAULTS = {
+      add: { topMin: 1,  topMax: 20, botMin: 1, botMax: 20, noNeg: false, useSumCap: true,  sumCap: 20, pages: 1, noCarry: false },
+      sub: { topMin: 5,  topMax: 20, botMin: 1, botMax: 10, noNeg: true,  useSumCap: false, sumCap: 20, pages: 1, noCarry: false },
+      mul: { topMin: 2,  topMax: 12, botMin: 2, botMax: 12, noNeg: false, useSumCap: false, sumCap: 0,  pages: 1 },
+      div: { topMin: 1,  topMax: 12, botMin: 2, botMax: 12, noNeg: false, useSumCap: false, sumCap: 0,  pages: 1 },
+    };
+
+    const OP_META = {
+      add: { label: 'Addition',       sym: '+', icon: 'fa-plus',   color: 'success' },
+      sub: { label: 'Subtraction',    sym: '−', icon: 'fa-minus',  color: 'danger'  },
+      mul: { label: 'Multiplication', sym: '×', icon: 'fa-xmark',  color: 'primary' },
+      div: { label: 'Division',       sym: '÷', icon: 'fa-divide', color: 'warning' },
+    };
+
+    /* ── Hash helpers ── */
+    function parseHash() {
+      const raw = window.location.hash.slice(1);
+      const p   = new URLSearchParams(raw);
+      const op  = p.get('op') || 'add';
+      const def = DEFAULTS[op] || DEFAULTS.add;
+      return {
+        op,
+        topMin:    p.has('topMin')    ? +p.get('topMin')              : def.topMin,
+        topMax:    p.has('topMax')    ? +p.get('topMax')              : def.topMax,
+        botMin:    p.has('botMin')    ? +p.get('botMin')              : def.botMin,
+        botMax:    p.has('botMax')    ? +p.get('botMax')              : def.botMax,
+        noNeg:     p.has('noNeg')     ? p.get('noNeg') === 'true'     : def.noNeg,
+        useSumCap: p.has('useSumCap') ? p.get('useSumCap') === 'true' : def.useSumCap,
+        sumCap:    p.has('sumCap')    ? +p.get('sumCap')              : def.sumCap,
+        noCarry:   p.has('noCarry')   ? p.get('noCarry') === 'true'   : (def.noCarry || false),
+        pages:     p.has('pages')     ? Math.max(1, Math.min(6, +p.get('pages'))) : def.pages,
+        seed:      p.has('seed')      ? +p.get('seed')                : randSeed(),
+      };
+    }
+
+    function encodeHash(cfg) {
+      const p = new URLSearchParams();
+      Object.entries(cfg).forEach(([k, v]) => p.set(k, String(v)));
+      return p.toString();
+    }
+
+    function randSeed() { return Math.floor(Math.random() * 999983) + 1; }
+
+    function fmtTime(secs) {
+      const m = String(Math.floor(secs / 60)).padStart(2, '0');
+      const s = String(secs % 60).padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    /* ── LocalStorage persistence ── */
+    const LS_KEY = 'madMinutesSettings';
+
+    function loadSavedSettings() {
+      try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; }
+      catch { return null; }
+    }
+
+    function saveSettings(cfg, timerDuration) {
+      try { localStorage.setItem(LS_KEY, JSON.stringify({ cfg, timerDuration })); }
+      catch {}
+    }
+
+    /* ── App ── */
+    function App() {
+      const [cfg, setCfg] = React.useState(() => {
+        if (!window.location.hash.slice(1)) {
+          const saved = loadSavedSettings();
+          if (saved?.cfg) return { ...saved.cfg, seed: randSeed() };
+        }
+        return parseHash();
+      });
+      const [phase,          setPhase]          = React.useState('idle');
+      const [usedTimer,      setUsedTimer]      = React.useState(false);
+      const [problems,       setProblems]       = React.useState([]);
+      const [answers,        setAnswers]        = React.useState(Array(25).fill(''));
+      const [timerDuration,  setTimerDuration]  = React.useState(() => {
+        if (!window.location.hash.slice(1)) {
+          const saved = loadSavedSettings();
+          if (saved?.timerDuration) return saved.timerDuration;
+        }
+        return 60;
+      });
+      const [timerRemaining, setTimerRemaining] = React.useState(0);
+      const [timerActive,    setTimerActive]    = React.useState(false);
+      const [startTime,      setStartTime]      = React.useState(null);
+      const [endTime,        setEndTime]        = React.useState(null);
+
+      const modalRef      = React.useRef(null);
+      const bsModal       = React.useRef(null);
+      const helpModalRef  = React.useRef(null);
+      const bsHelpModal   = React.useRef(null);
+      const inputRefs     = React.useRef([]);
+
+      /* ── Bootstrap modal init ── */
+      React.useEffect(() => {
+        bsModal.current     = new bootstrap.Modal(modalRef.current,     { backdrop: 'static', keyboard: false });
+        bsHelpModal.current = new bootstrap.Modal(helpModalRef.current, { backdrop: true,     keyboard: true  });
+        bsModal.current.show();
+      }, []);
+
+      /* ── Sync cfg → hash ── */
+      React.useEffect(() => {
+        const next = encodeHash(cfg);
+        if (window.location.hash.slice(1) !== next) window.location.hash = next;
+      }, [cfg]);
+
+      /* ── Auto-focus problem 1 after generate ── */
+      React.useEffect(() => {
+        if (phase === 'active') {
+          const id = setTimeout(() => { inputRefs.current[0]?.focus(); }, 350);
+          return () => clearTimeout(id);
+        }
+      }, [phase]);
+
+      /* ── Countdown timer ── */
+      React.useEffect(() => {
+        if (!timerActive || timerRemaining <= 0) return;
+        const id = setTimeout(() => {
+          setTimerRemaining(prev => {
+            if (prev <= 1) {
+              setTimerActive(false);
+              setEndTime(Date.now());
+              setPhase('checked');
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        return () => clearTimeout(id);
+      }, [timerActive, timerRemaining]);
+
+      /* ── Global keyboard shortcuts ── */
+      React.useEffect(() => {
+        function onGlobalKey(e) {
+          const anyModalOpen  = document.body.classList.contains('modal-open');
+          const settingsOpen  = modalRef.current?.classList.contains('show');
+
+          // ? → help (works from any context, including inside inputs)
+          if (e.key === '?') {
+            e.preventDefault();
+            if (!anyModalOpen) bsHelpModal.current?.show();
+            return;
+          }
+
+          // Esc inside settings modal → new seed
+          if (e.key === 'Escape' && settingsOpen) {
+            setCfg(prev => ({ ...prev, seed: randSeed() }));
+            return;
+          }
+
+          // Enter inside settings modal (not in a field) → start timer
+          if (e.key === 'Enter' && settingsOpen && e.target.tagName !== 'INPUT') {
+            e.preventDefault();
+            doGenerate(true);
+            return;
+          }
+
+          // Remaining shortcuts don't fire while the user is typing in an answer input
+          if (e.target.tagName === 'INPUT') return;
+
+          // Esc → open settings (only when no modal is already open)
+          if (e.key === 'Escape' && phase !== 'idle' && !anyModalOpen) {
+            bsModal.current?.show();
+            return;
+          }
+
+          // C → check answers
+          if ((e.key === 'c' || e.key === 'C') && phase === 'active') {
+            doCheck();
+          }
+        }
+
+        window.addEventListener('keydown', onGlobalKey);
+        return () => window.removeEventListener('keydown', onGlobalKey);
+      }, [phase, cfg, timerDuration]); // doCheck stable; doGenerate needs cfg + timerDuration
+
+      /* ── Config helpers ── */
+      const setCfgField = key => e => {
+        const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+        setCfg(prev => ({ ...prev, [key]: val }));
+      };
+
+      const setCfgInt = key => e => {
+        const n = parseInt(e.target.value, 10);
+        if (!isNaN(n)) setCfg(prev => ({ ...prev, [key]: n }));
+      };
+
+      const switchOp = op => setCfg(prev => ({ op, ...DEFAULTS[op], seed: prev.seed }));
+      const randomize = () => setCfg(prev => ({ ...prev, seed: randSeed() }));
+
+      /* ── Generate ── */
+      function doGenerate(withTimer) {
+        saveSettings(cfg, timerDuration);
+        const total = (cfg.pages || 1) * 25;
+        const rng   = mulberry32(cfg.seed);
+        const prbs  = Array.from({ length: total }, () => genProblem(rng, cfg.op, cfg));
+        setProblems(prbs);
+        setAnswers(Array(total).fill(''));
+        setStartTime(Date.now());
+        setEndTime(null);
+        setUsedTimer(withTimer);
+        setPhase('active');
+        if (withTimer && timerDuration > 0) {
+          setTimerRemaining(timerDuration);
+          setTimerActive(true);
+        } else {
+          setTimerRemaining(0);
+          setTimerActive(false);
+        }
+        bsModal.current.hide();
+      }
+
+      /* ── Check answers ── */
+      function doCheck() {
+        setTimerActive(false);
+        setEndTime(Date.now());
+        setPhase('checked');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      /* ── Input key handling ── */
+      function onKeyDown(e, i) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const next = inputRefs.current[i + 1];
+          if (next) next.focus();
+          // Auto-check when every box (including this one) has a value
+          if (phase === 'active') {
+            const allFilled = answers.every((a, idx) =>
+              idx === i ? e.target.value !== '' : a !== ''
+            );
+            if (allFilled) doCheck();
+          }
+          return;
+        }
+        // Let Escape bubble to the global handler
+        if (['Escape', 'Tab', 'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        if (e.key === '-' && cfg.op === 'sub' && !cfg.noNeg
+            && e.target.selectionStart === 0 && !answers[i].includes('-')) return;
+        if (/^[0-9]$/.test(e.key)) return;
+        e.preventDefault();
+      }
+
+      function onAnswerChange(e, i) {
+        let val = e.target.value;
+        const allowMinus = cfg.op === 'sub' && !cfg.noNeg;
+        if (allowMinus) {
+          val = val.replace(/[^0-9-]/g, '');
+          if (val.length > 1) val = (val[0] === '-' ? '-' : '') + val.replace(/-/g, '');
+        } else {
+          val = val.replace(/[^0-9]/g, '');
+        }
+        setAnswers(prev => { const n = [...prev]; n[i] = val; return n; });
+      }
+
+      /* ── Derived values ── */
+      const elapsed = (startTime && endTime) ? Math.round((endTime - startTime) / 1000) : null;
+      const score   = phase === 'checked'
+        ? problems.reduce((acc, p, i) =>
+            acc + (answers[i] !== '' && parseInt(answers[i], 10) === p.answer ? 1 : 0), 0)
+        : null;
+      const total   = problems.length || 25;
+
+      const opMeta     = OP_META[cfg.op] || OP_META.add;
+      const pageCount  = cfg.pages || 1;
+      const pageGroups = Array.from({ length: pageCount }, (_, pi) =>
+        problems.slice(pi * 25, (pi + 1) * 25)
+      );
+
+      function subtitleText() {
+        if (cfg.op === 'div')
+          return `Division — ÷(${cfg.botMin}–${cfg.botMax}), answer (${cfg.topMin}–${cfg.topMax})`;
+        if (cfg.op === 'add' && cfg.useSumCap)
+          return `Addition — (${cfg.topMin}–${cfg.topMax}) + (${cfg.botMin}–${cfg.botMax}) ≤ ${cfg.sumCap}`;
+        return `${opMeta.label} — (${cfg.topMin}–${cfg.topMax}) ${opMeta.sym} (${cfg.botMin}–${cfg.botMax})`;
+      }
+
+      /* ── Render ── */
+      return (
+        <>
+          {/* ════ Help Modal ════ */}
+          <div ref={helpModalRef} className="modal fade" tabIndex="-1" aria-labelledby="helpLabel" aria-hidden="true">
+            <div className="modal-dialog modal-dialog-centered" style={{maxWidth: 360}}>
+              <div className="modal-content border-0 shadow-lg overflow-hidden">
+                <div className="modal-header bg-dark text-white border-0">
+                  <h5 className="modal-title fw-bold" id="helpLabel">
+                    <i className="fas fa-keyboard me-2"></i>Keyboard Shortcuts
+                  </h5>
+                  <button type="button" className="btn-close btn-close-white"
+                    onClick={() => bsHelpModal.current.hide()} aria-label="Close" />
+                </div>
+                <div className="modal-body px-4 py-3">
+                  <table className="table table-sm table-borderless mb-0 align-middle">
+                    <tbody>
+                      <tr>
+                        <td className="pe-3 text-muted small" colSpan="2" style={{paddingBottom: 2}}>
+                          <strong>During play</strong>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="pe-3"><kbd>Esc</kbd></td>
+                        <td className="text-secondary">Open Settings</td>
+                      </tr>
+                      <tr>
+                        <td><kbd>Enter</kbd></td>
+                        <td className="text-secondary">
+                          Move to next box
+                          <div className="text-muted" style={{fontSize: '.8em'}}>
+                            Auto-checks when all boxes are filled
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td><kbd>C</kbd></td>
+                        <td className="text-secondary">Check Answers</td>
+                      </tr>
+                      <tr>
+                        <td className="pe-3 text-muted small" colSpan="2" style={{paddingTop: 10, paddingBottom: 2}}>
+                          <strong>In Settings modal</strong>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="pe-3"><kbd>Esc</kbd></td>
+                        <td className="text-secondary">New random seed</td>
+                      </tr>
+                      <tr>
+                        <td><kbd>Enter</kbd></td>
+                        <td className="text-secondary">Start Timer</td>
+                      </tr>
+                      <tr>
+                        <td className="pe-3 text-muted small" colSpan="2" style={{paddingTop: 10, paddingBottom: 2}}>
+                          <strong>Always</strong>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td><kbd>?</kbd></td>
+                        <td className="text-secondary">This help screen</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <hr className="my-3" />
+                  <p className="text-muted mb-0" style={{fontSize: '.85rem'}}>
+                    <i className="fas fa-link me-1"></i>
+                    Share the URL to give someone the exact same sheet.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ════ Settings Modal ════ */}
+          <div ref={modalRef} className="modal fade" tabIndex="-1" aria-labelledby="mmLabel" aria-hidden="true">
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content border-0 shadow-lg overflow-hidden">
+
+                {/* Colored header */}
+                <div className={`modal-header bg-${opMeta.color} text-white border-0 py-3`}>
+                  <div className="d-flex align-items-center gap-3 w-100">
+                    <div className="bg-white bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center"
+                      style={{width: 44, height: 44, flexShrink: 0}}>
+                      <i className={`fas ${opMeta.icon} fs-5`}></i>
+                    </div>
+                    <div>
+                      <h5 className="modal-title fw-bold mb-0" id="mmLabel">Mad Minutes</h5>
+                      <div className="small opacity-75">{opMeta.label}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="modal-body px-4 pt-4 pb-2">
+
+                  {/* Operation */}
+                  <div className="mb-4">
+                    <div className="section-label">Operation</div>
+                    <div className="btn-group w-100" role="group" aria-label="Operation">
+                      {Object.entries(OP_META).map(([key, { label, icon, color }]) => (
+                        <button key={key} type="button"
+                          className={`btn modal-op-btn ${cfg.op === key ? `btn-${color}` : 'btn-outline-secondary'}`}
+                          onClick={() => switchOp(key)}>
+                          <i className={`fas ${icon}`}></i>
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Ranges */}
+                  <div className="mb-3">
+                    <div className="section-label">Number Ranges</div>
+                    <div className="row g-2">
+                      <div className="col-6">
+                        <label className="form-label small fw-semibold text-secondary mb-1">
+                          {cfg.op === 'div' ? 'Answer (quotient)' : 'Top Number'}
+                        </label>
+                        <div className="input-group input-group-sm">
+                          <input type="number" className="form-control" value={cfg.topMin} min="0" onChange={setCfgInt('topMin')} />
+                          <span className="input-group-text px-2">–</span>
+                          <input type="number" className="form-control" value={cfg.topMax} min="0" onChange={setCfgInt('topMax')} />
+                        </div>
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label small fw-semibold text-secondary mb-1">
+                          {cfg.op === 'div' ? 'Divisor (≥ 1)' : 'Bottom Number'}
+                        </label>
+                        <div className="input-group input-group-sm">
+                          <input type="number" className="form-control" value={cfg.botMin}
+                            min={cfg.op === 'div' ? 1 : 0} onChange={setCfgInt('botMin')} />
+                          <span className="input-group-text px-2">–</span>
+                          <input type="number" className="form-control" value={cfg.botMax}
+                            min={cfg.op === 'div' ? 1 : 0} onChange={setCfgInt('botMax')} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Addition: sum cap + no carrying */}
+                  {cfg.op === 'add' && (
+                    <div className="alert alert-success py-2 px-3 mb-3 d-flex align-items-center gap-3 flex-wrap">
+                      <div className="form-check mb-0">
+                        <input className="form-check-input" type="checkbox" id="useSumCap"
+                          checked={!!cfg.useSumCap} onChange={setCfgField('useSumCap')} />
+                        <label className="form-check-label fw-semibold" htmlFor="useSumCap">
+                          Limit total
+                        </label>
+                      </div>
+                      {cfg.useSumCap && (
+                        <div className="d-flex align-items-center gap-2">
+                          <span className="small text-success-emphasis">top + bottom ≤</span>
+                          <input type="number" className="form-control form-control-sm" value={cfg.sumCap}
+                            min="1" onChange={setCfgInt('sumCap')} style={{width: 70}} />
+                        </div>
+                      )}
+                      <div className="form-check mb-0">
+                        <input className="form-check-input" type="checkbox" id="noCarryAdd"
+                          checked={!!cfg.noCarry} onChange={setCfgField('noCarry')} />
+                        <label className="form-check-label fw-semibold" htmlFor="noCarryAdd">
+                          No carrying
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Subtraction: no negatives + no borrowing */}
+                  {cfg.op === 'sub' && (
+                    <div className="alert alert-warning py-2 px-3 mb-3">
+                      <div className="form-check mb-0">
+                        <input className="form-check-input" type="checkbox" id="noNeg"
+                          checked={!!cfg.noNeg} onChange={setCfgField('noNeg')} />
+                        <label className="form-check-label fw-semibold" htmlFor="noNeg">
+                          No negative answers
+                        </label>
+                      </div>
+                      <div className="form-check mb-0 mt-2">
+                        <input className="form-check-input" type="checkbox" id="noCarrySub"
+                          checked={!!cfg.noCarry} onChange={setCfgField('noCarry')} />
+                        <label className="form-check-label fw-semibold" htmlFor="noCarrySub">
+                          No borrowing
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Seed */}
+                  <div className="border-top pt-3 mt-2">
+                    <div className="section-label">
+                      <i className="fas fa-fingerprint me-1"></i>Reproducible Seed
+                    </div>
+                    <div className="input-group input-group-sm">
+                      <span className="input-group-text bg-secondary text-white border-secondary">
+                        <i className="fas fa-hashtag"></i>
+                      </span>
+                      <input type="number" className="form-control font-monospace" value={cfg.seed} onChange={setCfgInt('seed')} />
+                      <button className="btn btn-outline-secondary" type="button" onClick={randomize}>
+                        <i className="fas fa-shuffle me-1"></i>New
+                      </button>
+                    </div>
+                    <div className="form-text">Same seed + same settings always reproduces the same sheet.</div>
+                  </div>
+
+                </div>
+
+                {/* Footer */}
+                <div className="modal-footer flex-column gap-2 bg-light border-top px-4 pt-3 pb-3">
+                  {/* Pages + Timer row */}
+                  <div className="d-flex gap-2 w-100">
+                    <div className="d-flex align-items-center gap-2 bg-white rounded border px-3 py-2 flex-fill">
+                      <i className="fas fa-copy text-secondary fs-5"></i>
+                      <span className="fw-semibold text-secondary">Pages</span>
+                      <input type="number" className="form-control form-control-sm ms-auto" min="1" max="6"
+                        value={cfg.pages || 1}
+                        onChange={e => setCfgInt('pages')({ target: { value: String(Math.max(1, Math.min(6, parseInt(e.target.value) || 1))) } })}
+                        style={{width: 54}} />
+                    </div>
+                    <div className="d-flex align-items-center gap-2 bg-white rounded border px-3 py-2 flex-fill">
+                      <i className="fas fa-stopwatch text-primary fs-5"></i>
+                      <span className="fw-semibold text-primary">Timer</span>
+                      <input type="number" className="form-control form-control-sm ms-auto" min="5" max="600"
+                        value={timerDuration}
+                        onChange={e => setTimerDuration(Math.max(5, parseInt(e.target.value) || 60))}
+                        style={{width: 64}} />
+                      <span className="text-muted small">sec</span>
+                    </div>
+                  </div>
+                  {/* Action buttons */}
+                  <div className="d-flex gap-2 w-100">
+                    <button type="button" className="btn btn-outline-primary flex-fill" onClick={() => doGenerate(false)}>
+                      <i className="fas fa-play me-2"></i>Generate
+                    </button>
+                    <button type="button" className="btn btn-primary flex-fill" onClick={() => doGenerate(true)}>
+                      <i className="fas fa-stopwatch me-2"></i>Start Timer
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* ════ Idle screen ════ */}
+          {phase === 'idle' && (
+            <div className="idle-screen no-print">
+              <i className="fas fa-calculator text-primary mb-4" style={{fontSize: '4.5rem', opacity: .85}}></i>
+              <h1 className="display-4 fw-bold mb-2">Mad Minutes</h1>
+              <p className="lead text-muted mb-4">How many math problems can you solve?</p>
+              <button className="btn btn-primary btn-lg px-5" onClick={() => bsModal.current.show()}>
+                <i className="fas fa-sliders me-2"></i>Configure &amp; Generate
+              </button>
+            </div>
+          )}
+
+          {/* ════ Active / Checked ════ */}
+          {phase !== 'idle' && (
+            <>
+              {/* Action bar */}
+              <div className="action-bar no-print">
+
+                <button className="btn btn-outline-secondary btn-sm"
+                  onClick={() => bsModal.current.show()}>
+                  <i className="fas fa-sliders me-1"></i>Settings
+                </button>
+                <button className="btn btn-outline-secondary btn-sm"
+                  onClick={() => bsHelpModal.current.show()} title="Keyboard shortcuts">
+                  <i className="fas fa-keyboard me-1"></i>?
+                </button>
+
+                {/* Middle: timer (only when started with timer) OR score after check */}
+                {phase === 'active' && usedTimer ? (
+                  <div className="d-flex align-items-center gap-2 flex-fill">
+                    <i className={`fas fa-stopwatch ${timerRemaining < 10 ? 'timer-urgent' : 'text-muted'}`}></i>
+                    <div className="timer-bar-wrap">
+                      <div className="progress" style={{height: 6}}>
+                        <div className="progress-bar" style={{
+                          width: `${(timerRemaining / timerDuration) * 100}%`,
+                          background: timerRemaining < 10 ? '#dc3545' : '#0d6efd',
+                          transition: 'width 1s linear',
+                        }} />
+                      </div>
+                    </div>
+                    <span className={`timer-digit ${timerRemaining < 10 ? 'timer-urgent text-danger' : ''}`}>
+                      {fmtTime(timerRemaining)}
+                    </span>
+                  </div>
+                ) : phase === 'checked' ? (
+                  <div className="d-flex align-items-center gap-3 flex-fill">
+                    <span>
+                      <i className="fas fa-trophy text-warning me-1"></i>
+                      <strong className="fs-5">{score}/{total}</strong>
+                    </span>
+                    {elapsed !== null && (
+                      <span className="text-muted">
+                        <i className="fas fa-clock me-1"></i>{fmtTime(elapsed)}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex-fill" />
+                )}
+
+                {/* Right side */}
+                {phase === 'active' ? (
+                  <div className="d-flex gap-2">
+                    {!usedTimer && (
+                      <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
+                        <i className="fas fa-print me-1"></i>Print
+                      </button>
+                    )}
+                    <button className="btn btn-success btn-sm" onClick={doCheck}>
+                      <i className="fas fa-check-circle me-1"></i>Check Answers
+                    </button>
+                  </div>
+                ) : (
+                  <div className="d-flex gap-2">
+                    <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
+                      <i className="fas fa-print me-1"></i>Print
+                    </button>
+                    <button className="btn btn-outline-secondary btn-sm" onClick={() => bsModal.current.show()}>
+                      <i className="fas fa-redo me-1"></i>Play Again
+                    </button>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Worksheets (one per page) */}
+              <div className="container-xl px-3 py-3 pb-5">
+                {pageGroups.map((pageProblems, pi) => (
+                  <React.Fragment key={pi}>
+
+                    {/* Screen-only separator between pages */}
+                    {pi > 0 && (
+                      <div className="page-sep">
+                        <span><i className="fas fa-file me-1"></i>Page {pi + 1} of {pageCount}</span>
+                      </div>
+                    )}
+
+                    <div className={`worksheet ${pi > 0 ? 'print-page-break' : ''}`}>
+
+                      <div className="worksheet-header">
+                        {/* Name / Date — print only */}
+                        <div className="ws-name-date">
+                          <strong>Name:</strong>
+                          <span className="line">&nbsp;</span>
+                          <strong>Date:</strong>
+                          <span className="line" style={{flex: 'none', width: 160}}>&nbsp;</span>
+                        </div>
+                        {/* Title — always visible */}
+                        <div className="ws-title">
+                          <h1>Mad Minutes</h1>
+                          <div className="subtitle">{subtitleText()}</div>
+                        </div>
+                      </div>
+
+                      {/* 5×5 grid */}
+                      <div className="problem-grid">
+                        {pageProblems.map((p, localIdx) => {
+                          const i        = pi * 25 + localIdx;
+                          const checked   = phase === 'checked';
+                          const ansInt    = parseInt(answers[i], 10);
+                          const isCorrect = checked && answers[i] !== '' && ansInt === p.answer;
+                          const isWrong   = checked && !isCorrect;
+
+                          return (
+                            <div key={i} className={`problem-cell ${isCorrect ? 'cell-correct' : isWrong ? 'cell-incorrect' : ''}`}>
+                              <div className="p-number">{p.top}</div>
+                              <div className="p-operator-row">
+                                <span>{p.sym}</span>
+                                <span>{p.bottom}</span>
+                              </div>
+                              <hr className="p-divider" />
+                              <input
+                                ref={el => inputRefs.current[i] = el}
+                                type="text"
+                                inputMode="numeric"
+                                className="answer-input"
+                                value={answers[i]}
+                                disabled={checked}
+                                onKeyDown={e => onKeyDown(e, i)}
+                                onChange={e => onAnswerChange(e, i)}
+                                aria-label={`Problem ${i + 1}`}
+                                autoComplete="off"
+                              />
+                              {isWrong && (
+                                <div className="correct-answer-hint">{p.answer}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Seed footer — print only */}
+                      <div className="ws-seed-footer">
+                        {'Seed: ' + cfg.seed}
+                        {pageCount > 1 && (' · Page ' + (pi + 1) + ' of ' + pageCount)}
+                      </div>
+
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
