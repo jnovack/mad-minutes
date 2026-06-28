@@ -390,6 +390,35 @@
       catch {}
     }
 
+    /* ── Numeric input: allows clearing while typing, validates on blur ── */
+    function NumericInput({ value, min, max, onChange, className, style }) {
+      const [raw, setRaw] = React.useState(String(value));
+      React.useEffect(() => { setRaw(String(value)); }, [value]);
+      return (
+        <input
+          type="number"
+          className={className}
+          style={style}
+          value={raw}
+          min={min}
+          max={max}
+          onChange={e => setRaw(e.target.value)}
+          onBlur={() => {
+            const n = parseInt(raw, 10);
+            if (!isNaN(n)) {
+              let v = n;
+              if (min !== undefined) v = Math.max(+min, v);
+              if (max !== undefined) v = Math.min(+max, v);
+              onChange(v);
+              setRaw(String(v));
+            } else {
+              setRaw(String(value));
+            }
+          }}
+        />
+      );
+    }
+
     /* ── App ── */
     function App() {
       const [cfg, setCfg] = React.useState(() => {
@@ -420,11 +449,19 @@
       const helpModalRef  = React.useRef(null);
       const bsHelpModal   = React.useRef(null);
       const inputRefs     = React.useRef([]);
+      const shouldFocusRef = React.useRef(false);
 
       /* ── Bootstrap modal init ── */
       React.useEffect(() => {
         bsModal.current     = new bootstrap.Modal(modalRef.current,     { backdrop: 'static', keyboard: false });
         bsHelpModal.current = new bootstrap.Modal(helpModalRef.current, { backdrop: true,     keyboard: true  });
+        /* Focus first input after modal closes, after Bootstrap restores opener focus */
+        modalRef.current.addEventListener('hidden.bs.modal', () => {
+          if (shouldFocusRef.current) {
+            shouldFocusRef.current = false;
+            inputRefs.current[0]?.focus();
+          }
+        });
         bsModal.current.show();
       }, []);
 
@@ -433,14 +470,6 @@
         const next = encodeHash(cfg);
         if (window.location.hash.slice(1) !== next) window.location.hash = next;
       }, [cfg]);
-
-      /* ── Auto-focus problem 1 after generate ── */
-      React.useEffect(() => {
-        if (phase === 'active') {
-          const id = setTimeout(() => { inputRefs.current[0]?.focus(); }, 350);
-          return () => clearTimeout(id);
-        }
-      }, [phase]);
 
       /* ── Countdown timer ── */
       React.useEffect(() => {
@@ -537,6 +566,7 @@
           setTimerRemaining(0);
           setTimerActive(false);
         }
+        shouldFocusRef.current = true;
         bsModal.current.hide();
       }
 
@@ -697,10 +727,10 @@
                   </div>
                 </div>
 
-                <div className="modal-body px-4 pt-4 pb-2">
+                <div className="modal-body px-4 pt-2 pb-2">
 
                   {/* Operation */}
-                  <div className="mb-4">
+                  <div className="mb-3">
                     <div className="section-label">Operation</div>
                     <div className="btn-group w-100" role="group" aria-label="Operation">
                       {Object.entries(OP_META).map(([key, { label, icon, color }]) => (
@@ -723,9 +753,9 @@
                           {cfg.op === 'div' ? 'Answer (quotient)' : 'Top Number'}
                         </label>
                         <div className="input-group input-group-sm">
-                          <input type="number" className="form-control" value={cfg.topMin} min="0" onChange={setCfgInt('topMin')} />
+                          <NumericInput className="form-control" value={cfg.topMin} min={0} onChange={v => setCfg(p => ({ ...p, topMin: v }))} />
                           <span className="input-group-text px-2">–</span>
-                          <input type="number" className="form-control" value={cfg.topMax} min="0" onChange={setCfgInt('topMax')} />
+                          <NumericInput className="form-control" value={cfg.topMax} min={0} onChange={v => setCfg(p => ({ ...p, topMax: v }))} />
                         </div>
                       </div>
                       <div className="col-6">
@@ -733,11 +763,9 @@
                           {cfg.op === 'div' ? 'Divisor (≥ 1)' : 'Bottom Number'}
                         </label>
                         <div className="input-group input-group-sm">
-                          <input type="number" className="form-control" value={cfg.botMin}
-                            min={cfg.op === 'div' ? 1 : 0} onChange={setCfgInt('botMin')} />
+                          <NumericInput className="form-control" value={cfg.botMin} min={cfg.op === 'div' ? 1 : 0} onChange={v => setCfg(p => ({ ...p, botMin: v }))} />
                           <span className="input-group-text px-2">–</span>
-                          <input type="number" className="form-control" value={cfg.botMax}
-                            min={cfg.op === 'div' ? 1 : 0} onChange={setCfgInt('botMax')} />
+                          <NumericInput className="form-control" value={cfg.botMax} min={cfg.op === 'div' ? 1 : 0} onChange={v => setCfg(p => ({ ...p, botMax: v }))} />
                         </div>
                       </div>
                     </div>
@@ -745,22 +773,23 @@
 
                   {/* Addition: sum cap + no carrying */}
                   {cfg.op === 'add' && (
-                    <div className="alert alert-success py-2 px-3 mb-3 d-flex align-items-center gap-3 flex-wrap">
-                      <div className="form-check mb-0">
-                        <input className="form-check-input" type="checkbox" id="useSumCap"
-                          checked={!!cfg.useSumCap} onChange={setCfgField('useSumCap')} />
-                        <label className="form-check-label fw-semibold" htmlFor="useSumCap">
-                          Limit total
-                        </label>
-                      </div>
-                      {cfg.useSumCap && (
-                        <div className="d-flex align-items-center gap-2">
-                          <span className="small text-success-emphasis">top + bottom ≤</span>
-                          <input type="number" className="form-control form-control-sm" value={cfg.sumCap}
-                            min="1" onChange={setCfgInt('sumCap')} style={{width: 70}} />
+                    <div className="alert alert-success py-2 px-3 mb-3">
+                      <div className="d-flex align-items-center gap-2 mb-0">
+                        <div className="form-check mb-0">
+                          <input className="form-check-input" type="checkbox" id="useSumCap"
+                            checked={!!cfg.useSumCap} onChange={setCfgField('useSumCap')} />
+                          <label className="form-check-label fw-semibold" htmlFor="useSumCap">
+                            Limit total
+                          </label>
                         </div>
-                      )}
-                      <div className="form-check mb-0">
+                        {cfg.useSumCap && (
+                          <div className="d-flex align-items-center gap-2 ms-2">
+                            <span className="small text-success-emphasis">top + bottom ≤</span>
+                            <NumericInput className="form-control form-control-sm" value={cfg.sumCap} min={1} onChange={v => setCfg(p => ({ ...p, sumCap: v }))} style={{width: 70}} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="form-check mb-0 mt-2">
                         <input className="form-check-input" type="checkbox" id="noCarryAdd"
                           checked={!!cfg.noCarry} onChange={setCfgField('noCarry')} />
                         <label className="form-check-label fw-semibold" htmlFor="noCarryAdd">
@@ -791,7 +820,7 @@
                   )}
 
                   {/* Seed */}
-                  <div className="border-top pt-3 mt-2">
+                  <div className="pt-1 mt-2">
                     <div className="section-label">
                       <i className="fas fa-fingerprint me-1"></i>Reproducible Seed
                     </div>
@@ -799,7 +828,7 @@
                       <span className="input-group-text bg-secondary text-white border-secondary">
                         <i className="fas fa-hashtag"></i>
                       </span>
-                      <input type="number" className="form-control font-monospace" value={cfg.seed} onChange={setCfgInt('seed')} />
+                      <NumericInput className="form-control font-monospace" value={cfg.seed} min={1} onChange={v => setCfg(p => ({ ...p, seed: v }))} />
                       <button className="btn btn-outline-secondary" type="button" onClick={randomize}>
                         <i className="fas fa-shuffle me-1"></i>New
                       </button>
@@ -810,24 +839,18 @@
                 </div>
 
                 {/* Footer */}
-                <div className="modal-footer flex-column gap-2 bg-light border-top px-4 pt-3 pb-3">
+                <div className="modal-footer flex-column gap-2 bg-light border-top px-4 pt-1 pb-3">
                   {/* Pages + Timer row */}
                   <div className="d-flex gap-2 w-100">
                     <div className="d-flex align-items-center gap-2 bg-white rounded border px-3 py-2 flex-fill">
                       <i className="fas fa-copy text-secondary fs-5"></i>
                       <span className="fw-semibold text-secondary">Pages</span>
-                      <input type="number" className="form-control form-control-sm ms-auto" min="1" max="6"
-                        value={cfg.pages || 1}
-                        onChange={e => setCfgInt('pages')({ target: { value: String(Math.max(1, Math.min(6, parseInt(e.target.value) || 1))) } })}
-                        style={{width: 54}} />
+                      <NumericInput className="form-control form-control-sm ms-auto" min={1} max={6} value={cfg.pages || 1} onChange={v => setCfg(p => ({ ...p, pages: v }))} style={{width: 54}} />
                     </div>
                     <div className="d-flex align-items-center gap-2 bg-white rounded border px-3 py-2 flex-fill">
                       <i className="fas fa-stopwatch text-primary fs-5"></i>
                       <span className="fw-semibold text-primary">Timer</span>
-                      <input type="number" className="form-control form-control-sm ms-auto" min="5" max="600"
-                        value={timerDuration}
-                        onChange={e => setTimerDuration(Math.max(5, parseInt(e.target.value) || 60))}
-                        style={{width: 64}} />
+                      <NumericInput className="form-control form-control-sm ms-auto" min={5} max={600} value={timerDuration} onChange={v => setTimerDuration(v)} style={{width: 64}} />
                       <span className="text-muted small">sec</span>
                     </div>
                   </div>
