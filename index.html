@@ -35,6 +35,7 @@
 
     /* ── Worksheet ── */
     .worksheet {
+      position: relative;
       background: white;
       border: 1px solid #dee2e6;
       border-radius: 8px;
@@ -120,7 +121,8 @@
       margin: 5px 0 3px;
     }
 
-    .answer-input {
+    .answer-input,
+    .answer-value {
       width: 100%;
       border: none;
       background: transparent;
@@ -137,6 +139,7 @@
 
     .answer-input:focus { background: #eef5ff; border-radius: 3px; }
     .answer-input:disabled { color: inherit; opacity: 1; -webkit-text-fill-color: inherit; }
+    .answer-value { min-height: 1.35em; color: inherit; }
 
     .correct-answer-hint {
       font-size: .65em;
@@ -192,6 +195,36 @@
       margin-top: 10px;
     }
 
+    .answer-key-print,
+    .ws-answer-qr {
+      display: none;
+    }
+
+    .ws-answer-qr {
+      margin-top: 18px;
+      font-family: Arial, sans-serif;
+      font-size: .78rem;
+      color: #222;
+    }
+
+    .ws-answer-qr-inner {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .ws-answer-qr-label {
+      text-align: right;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+
+    .ws-answer-qr img {
+      width: 168px;
+      height: 168px;
+    }
+
     /* ── Print ── */
     @media print {
       body { background: white; }
@@ -206,6 +239,8 @@
         margin: 0;
       }
 
+      .container-xl { padding: 0 !important; }
+
       .problem-cell {
         border: 1px solid #555;
         border-radius: 0;
@@ -218,9 +253,35 @@
       .cell-correct  { background: #d1e7dd !important; }
       .cell-incorrect { background: #f8d7da !important; }
       .answer-input { color: black; }
+      .answer-value { color: black; }
+      .worksheet.answer-sheet .problem-cell {
+        min-height: 122px;
+        font-size: 2.05rem;
+      }
+      .worksheet.answer-sheet .answer-value { font-size: 1.45em; }
+      .worksheet.answer-sheet .ws-title h1 { font-size: 2.2rem; }
       .ws-name-date { display: flex !important; }
       .page-sep { display: none !important; }
       .ws-seed-footer { display: block; }
+      .print-with-answers .answer-key-print,
+      .print-with-qr .ws-answer-qr { display: block; }
+      .print-with-qr .worksheet {
+        box-sizing: border-box;
+        min-height: 10in;
+        padding-bottom: 1.95in;
+      }
+      .print-with-qr .ws-seed-footer {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        text-align: left;
+        max-width: calc(100% - 190px);
+      }
+      .print-with-qr .ws-answer-qr {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+      }
     }
 
     .print-page-break { break-before: page; }
@@ -232,6 +293,7 @@
   <div id="root"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
@@ -363,10 +425,67 @@
       };
     }
 
+    function parseView() {
+      const p = new URLSearchParams(window.location.hash.slice(1));
+      return p.get('view') === 'answers' ? 'answers' : 'worksheet';
+    }
+
     function encodeHash(cfg) {
       const p = new URLSearchParams();
       Object.entries(cfg).forEach(([k, v]) => p.set(k, String(v)));
       return p.toString();
+    }
+
+    function makeUrlWithView(view) {
+      const url = new URL(window.location.href);
+      const p = new URLSearchParams(url.hash.slice(1));
+      if (view === 'answers') p.set('view', 'answers');
+      else p.delete('view');
+      url.hash = p.toString();
+      return url.toString();
+    }
+
+    function makeAnswerUrl(cfg) {
+      const url = new URL(window.location.href);
+      const def = DEFAULTS[cfg.op] || DEFAULTS.add;
+      const p = new URLSearchParams();
+      p.set('op', cfg.op);
+      ['topMin', 'topMax', 'botMin', 'botMax', 'pages', 'seed'].forEach(key => {
+        p.set(key, String(cfg[key]));
+      });
+      if (!!cfg.noNeg !== !!def.noNeg) p.set('noNeg', String(!!cfg.noNeg));
+      if (!!cfg.useSumCap !== !!def.useSumCap) p.set('useSumCap', String(!!cfg.useSumCap));
+      if (cfg.useSumCap || +cfg.sumCap !== +def.sumCap) p.set('sumCap', String(cfg.sumCap));
+      if (!!cfg.noCarry !== !!def.noCarry) p.set('noCarry', String(!!cfg.noCarry));
+      p.set('view', 'answers');
+      url.hash = p.toString();
+      return url.toString();
+    }
+
+    function isShareableUrl(url) {
+      try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    }
+
+    function makeAnswerQr(url) {
+      return new Promise(resolve => {
+        if (!window.qrcode) {
+          resolve('');
+          return;
+        }
+        try {
+          const qr = window.qrcode(0, 'M');
+          qr.addData(url);
+          qr.make();
+          resolve(qr.createDataURL(4, 1));
+        } catch {
+          resolve('');
+        }
+      });
     }
 
     function randSeed() { return Math.floor(Math.random() * 999983) + 1; }
@@ -443,11 +562,17 @@
       const [timerActive,    setTimerActive]    = React.useState(false);
       const [startTime,      setStartTime]      = React.useState(null);
       const [endTime,        setEndTime]        = React.useState(null);
+      const [view,           setView]           = React.useState(() => parseView());
+      const [printMode,      setPrintMode]      = React.useState('none');
+      const [answerQrUrl,    setAnswerQrUrl]    = React.useState('');
+      const [printError,     setPrintError]     = React.useState('');
 
       const modalRef      = React.useRef(null);
       const bsModal       = React.useRef(null);
       const helpModalRef  = React.useRef(null);
       const bsHelpModal   = React.useRef(null);
+      const printModalRef = React.useRef(null);
+      const bsPrintModal  = React.useRef(null);
       const inputRefs     = React.useRef([]);
       const shouldFocusRef = React.useRef(false);
 
@@ -455,6 +580,7 @@
       React.useEffect(() => {
         bsModal.current     = new bootstrap.Modal(modalRef.current,     { backdrop: 'static', keyboard: false });
         bsHelpModal.current = new bootstrap.Modal(helpModalRef.current, { backdrop: true,     keyboard: true  });
+        bsPrintModal.current = new bootstrap.Modal(printModalRef.current, { backdrop: true,    keyboard: true  });
         /* Focus first input after modal closes, after Bootstrap restores opener focus */
         modalRef.current.addEventListener('hidden.bs.modal', () => {
           if (shouldFocusRef.current) {
@@ -462,14 +588,78 @@
             inputRefs.current[0]?.focus();
           }
         });
-        bsModal.current.show();
+        if (parseView() === 'answers') {
+          doGenerate(false, { answerView: true });
+        } else {
+          bsModal.current.show();
+        }
       }, []);
+
+      React.useEffect(() => {
+        function onHashChange() {
+          const currentParams = new URLSearchParams(encodeHash(cfg));
+          if (view === 'answers') currentParams.set('view', 'answers');
+          if (window.location.hash.slice(1) === currentParams.toString()) return;
+          const nextCfg = parseHash();
+          const nextView = parseView();
+          setCfg(nextCfg);
+          if (nextView === 'answers') {
+            const total = (nextCfg.pages || 1) * 25;
+            const rng = mulberry32(nextCfg.seed);
+            const prbs = Array.from({ length: total }, () => genProblem(rng, nextCfg.op, nextCfg));
+            setProblems(prbs);
+            setAnswers(prbs.map(p => String(p.answer)));
+            setStartTime(Date.now());
+            setEndTime(null);
+            setUsedTimer(false);
+            setTimerRemaining(0);
+            setTimerActive(false);
+            setView('answers');
+            setPhase('checked');
+            bsModal.current?.hide();
+          } else if (view === 'answers') {
+            setView('worksheet');
+            setProblems([]);
+            setAnswers(Array((nextCfg.pages || 1) * 25).fill(''));
+            setPhase('idle');
+            bsModal.current?.show();
+          } else {
+            setView('worksheet');
+          }
+        }
+        window.addEventListener('hashchange', onHashChange);
+        return () => window.removeEventListener('hashchange', onHashChange);
+      }, [view]);
 
       /* ── Sync cfg → hash ── */
       React.useEffect(() => {
-        const next = encodeHash(cfg);
+        const nextParams = new URLSearchParams(encodeHash(cfg));
+        if (view === 'answers') nextParams.set('view', 'answers');
+        const next = nextParams.toString();
         if (window.location.hash.slice(1) !== next) window.location.hash = next;
-      }, [cfg]);
+      }, [cfg, view]);
+
+      React.useEffect(() => {
+        if (phase === 'idle') return;
+        const url = makeAnswerUrl(cfg);
+        makeAnswerQr(url).then(setAnswerQrUrl);
+      }, [cfg, phase, view]);
+
+      React.useEffect(() => {
+        document.body.classList.toggle('print-with-qr', printMode === 'qr');
+        document.body.classList.toggle('print-with-answers', printMode === 'answers');
+        return () => {
+          document.body.classList.remove('print-with-qr', 'print-with-answers');
+        };
+      }, [printMode]);
+
+      React.useEffect(() => {
+        function onAfterPrint() {
+          setPrintMode('none');
+        }
+        window.addEventListener('afterprint', onAfterPrint);
+        return () => window.removeEventListener('afterprint', onAfterPrint);
+      }, []);
 
       /* ── Countdown timer ── */
       React.useEffect(() => {
@@ -548,17 +738,18 @@
       const randomize = () => setCfg(prev => ({ ...prev, seed: randSeed() }));
 
       /* ── Generate ── */
-      function doGenerate(withTimer) {
+      function doGenerate(withTimer, opts = {}) {
         saveSettings(cfg, timerDuration);
         const total = (cfg.pages || 1) * 25;
         const rng   = mulberry32(cfg.seed);
         const prbs  = Array.from({ length: total }, () => genProblem(rng, cfg.op, cfg));
         setProblems(prbs);
-        setAnswers(Array(total).fill(''));
+        setAnswers(opts.answerView ? prbs.map(p => String(p.answer)) : Array(total).fill(''));
         setStartTime(Date.now());
         setEndTime(null);
         setUsedTimer(withTimer);
-        setPhase('active');
+        setView(opts.answerView ? 'answers' : 'worksheet');
+        setPhase(opts.answerView ? 'checked' : 'active');
         if (withTimer && timerDuration > 0) {
           setTimerRemaining(timerDuration);
           setTimerActive(true);
@@ -567,7 +758,47 @@
           setTimerActive(false);
         }
         shouldFocusRef.current = true;
-        bsModal.current.hide();
+        bsModal.current?.hide();
+      }
+
+      function doShowPrintOptions() {
+        setPrintMode('none');
+        setPrintError('');
+        bsPrintModal.current?.show();
+      }
+
+      async function doPrint(mode) {
+        let nextAnswerQrUrl = answerQrUrl;
+        if (mode === 'qr') {
+          const answerUrl = makeAnswerUrl(cfg);
+          if (!isShareableUrl(answerUrl)) {
+            setPrintError('QR codes require this page to be opened from an http or https URL. A local file URL cannot open on your phone.');
+            return;
+          }
+          if (!answerQrUrl) {
+            nextAnswerQrUrl = await makeAnswerQr(answerUrl);
+          }
+          if (!nextAnswerQrUrl) {
+            setPrintError('Could not generate the QR code. Use Answer Sheet or Worksheet Only.');
+            return;
+          }
+        }
+        ReactDOM.flushSync(() => {
+          if (nextAnswerQrUrl !== answerQrUrl) setAnswerQrUrl(nextAnswerQrUrl);
+          setPrintMode(mode);
+        });
+        if (mode === 'qr' && nextAnswerQrUrl) {
+          await new Promise(resolve => {
+            const img = new Image();
+            img.onload = resolve;
+            img.onerror = resolve;
+            img.src = nextAnswerQrUrl;
+          });
+        }
+        document.body.classList.toggle('print-with-qr', mode === 'qr');
+        document.body.classList.toggle('print-with-answers', mode === 'answers');
+        bsPrintModal.current?.hide();
+        setTimeout(() => window.print(), 150);
       }
 
       /* ── Check answers ── */
@@ -635,11 +866,99 @@
         return `${opMeta.label} — (${cfg.topMin}–${cfg.topMax}) ${opMeta.sym} (${cfg.botMin}–${cfg.botMax})`;
       }
 
+      function renderWorksheetPage(pageProblems, pi, answerSheet = false) {
+        return (
+          <React.Fragment key={`${answerSheet ? 'answers' : 'worksheet'}-${pi}`}>
+            {pi > 0 && !answerSheet && (
+              <div className="page-sep">
+                <span><i className="fas fa-file me-1"></i>Page {pi + 1} of {pageCount}</span>
+              </div>
+            )}
+
+            <div className={`worksheet ${answerSheet || view === 'answers' ? 'answer-sheet' : ''} ${pi > 0 || answerSheet ? 'print-page-break' : ''}`}>
+
+              <div className="worksheet-header">
+                <div className="ws-name-date">
+                  <strong>Name:</strong>
+                  <span className="line">&nbsp;</span>
+                  <strong>Date:</strong>
+                  <span className="line" style={{flex: 'none', width: 160}}>&nbsp;</span>
+                </div>
+                <div className="ws-title">
+                  <h1>{answerSheet || view === 'answers' ? 'Answers' : 'Mad Minutes'}</h1>
+                  <div className="subtitle">{subtitleText()}</div>
+                </div>
+              </div>
+
+              <div className="problem-grid">
+                {pageProblems.map((p, localIdx) => {
+                  const i        = pi * 25 + localIdx;
+                  const checked   = phase === 'checked' && !answerSheet && view !== 'answers';
+                  const ansInt    = parseInt(answers[i], 10);
+                  const isCorrect = checked && answers[i] !== '' && ansInt === p.answer;
+                  const isWrong   = checked && !isCorrect;
+                  const answerValue = answerSheet || view === 'answers' ? String(p.answer) : answers[i];
+
+                  return (
+                    <div key={i} className={`problem-cell ${isCorrect ? 'cell-correct' : isWrong ? 'cell-incorrect' : ''}`}>
+                      <div className="p-number">{p.top}</div>
+                      <div className="p-operator-row">
+                        <span>{p.sym}</span>
+                        <span>{p.bottom}</span>
+                      </div>
+                      <hr className="p-divider" />
+                      {answerSheet || view === 'answers' ? (
+                        <div className="answer-value" aria-label={`Problem ${i + 1} answer`}>
+                          {answerValue}
+                        </div>
+                      ) : (
+                        <input
+                          ref={el => inputRefs.current[i] = el}
+                          type="text"
+                          inputMode="numeric"
+                          className="answer-input"
+                          value={answerValue}
+                          disabled={checked}
+                          onKeyDown={e => onKeyDown(e, i)}
+                          onChange={e => onAnswerChange(e, i)}
+                          aria-label={`Problem ${i + 1}`}
+                          autoComplete="off"
+                        />
+                      )}
+                      {isWrong && (
+                        <div className="correct-answer-hint">{p.answer}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="ws-seed-footer">
+                {'Seed: ' + cfg.seed}
+                {pageCount > 1 && (' · Page ' + (pi + 1) + ' of ' + pageCount)}
+              </div>
+
+              {!answerSheet && view !== 'answers' && (
+                <div className="ws-answer-qr">
+                  <div className="ws-answer-qr-inner">
+                    <div className="ws-answer-qr-label">
+                      Answer<br />key
+                    </div>
+                    {answerQrUrl && <img src={answerQrUrl} alt="Answer key QR code" />}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </React.Fragment>
+        );
+      }
+
       /* ── Render ── */
       return (
         <>
           {/* ════ Help Modal ════ */}
-          <div ref={helpModalRef} className="modal fade" tabIndex="-1" aria-labelledby="helpLabel" aria-hidden="true">
+          <div ref={helpModalRef} className="modal fade no-print" tabIndex="-1" aria-labelledby="helpLabel" aria-hidden="true">
             <div className="modal-dialog modal-dialog-centered" style={{maxWidth: 360}}>
               <div className="modal-content border-0 shadow-lg overflow-hidden">
                 <div className="modal-header bg-dark text-white border-0">
@@ -709,7 +1028,7 @@
           </div>
 
           {/* ════ Settings Modal ════ */}
-          <div ref={modalRef} className="modal fade" tabIndex="-1" aria-labelledby="mmLabel" aria-hidden="true">
+          <div ref={modalRef} className="modal fade no-print" tabIndex="-1" aria-labelledby="mmLabel" aria-hidden="true">
             <div className="modal-dialog modal-dialog-centered">
               <div className="modal-content border-0 shadow-lg overflow-hidden">
 
@@ -869,6 +1188,52 @@
             </div>
           </div>
 
+          {/* ════ Print Options Modal ════ */}
+          <div ref={printModalRef} className="modal fade no-print" tabIndex="-1" aria-labelledby="printLabel" aria-hidden="true">
+            <div className="modal-dialog modal-dialog-centered" style={{maxWidth: 420}}>
+              <div className="modal-content border-0 shadow-lg overflow-hidden">
+                <div className="modal-header bg-primary text-white border-0">
+                  <h5 className="modal-title fw-bold" id="printLabel">
+                    <i className="fas fa-print me-2"></i>Print Options
+                  </h5>
+                  <button type="button" className="btn-close btn-close-white"
+                    onClick={() => bsPrintModal.current.hide()} aria-label="Close" />
+                </div>
+                <div className="modal-body p-3">
+                  <div className="d-grid gap-2">
+                    {printError && (
+                      <div className="alert alert-warning py-2 px-3 mb-1 small">
+                        {printError}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary text-start"
+                      disabled={!isShareableUrl(makeAnswerUrl(cfg))}
+                      title={!isShareableUrl(makeAnswerUrl(cfg)) ? 'Open from an http or https URL to print a phone-scannable QR code.' : undefined}
+                      onClick={() => doPrint('qr')}>
+                      <i className="fas fa-qrcode me-2"></i>
+                      Print worksheet with answer QR code
+                    </button>
+                    {!isShareableUrl(makeAnswerUrl(cfg)) && (
+                      <div className="text-muted small px-1">
+                        QR codes need a hosted URL. Local file URLs do not work on phones.
+                      </div>
+                    )}
+                    <button type="button" className="btn btn-outline-primary text-start" onClick={() => doPrint('answers')}>
+                      <i className="fas fa-file-circle-check me-2"></i>
+                      Print worksheet and answer sheet
+                    </button>
+                    <button type="button" className="btn btn-primary text-start" onClick={() => doPrint('none')}>
+                      <i className="fas fa-file me-2"></i>
+                      Print worksheet only
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* ════ Idle screen ════ */}
           {phase === 'idle' && (
             <div className="idle-screen no-print">
@@ -913,7 +1278,7 @@
                       {fmtTime(timerRemaining)}
                     </span>
                   </div>
-                ) : phase === 'checked' ? (
+                ) : phase === 'checked' && view !== 'answers' ? (
                   <div className="d-flex align-items-center gap-3 flex-fill">
                     <span>
                       <i className="fas fa-trophy text-warning me-1"></i>
@@ -933,7 +1298,7 @@
                 {phase === 'active' ? (
                   <div className="d-flex gap-2">
                     {!usedTimer && (
-                      <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
+                      <button className="btn btn-primary btn-sm" onClick={doShowPrintOptions}>
                         <i className="fas fa-print me-1"></i>Print
                       </button>
                     )}
@@ -943,12 +1308,14 @@
                   </div>
                 ) : (
                   <div className="d-flex gap-2">
-                    <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
+                    <button className="btn btn-primary btn-sm" onClick={doShowPrintOptions}>
                       <i className="fas fa-print me-1"></i>Print
                     </button>
-                    <button className="btn btn-outline-secondary btn-sm" onClick={() => bsModal.current.show()}>
-                      <i className="fas fa-redo me-1"></i>Play Again
-                    </button>
+                    {view !== 'answers' && (
+                      <button className="btn btn-outline-secondary btn-sm" onClick={() => bsModal.current.show()}>
+                        <i className="fas fa-redo me-1"></i>Play Again
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -957,78 +1324,13 @@
               {/* Worksheets (one per page) */}
               <div className="container-xl px-3 py-3 pb-5">
                 {pageGroups.map((pageProblems, pi) => (
-                  <React.Fragment key={pi}>
-
-                    {/* Screen-only separator between pages */}
-                    {pi > 0 && (
-                      <div className="page-sep">
-                        <span><i className="fas fa-file me-1"></i>Page {pi + 1} of {pageCount}</span>
-                      </div>
-                    )}
-
-                    <div className={`worksheet ${pi > 0 ? 'print-page-break' : ''}`}>
-
-                      <div className="worksheet-header">
-                        {/* Name / Date — print only */}
-                        <div className="ws-name-date">
-                          <strong>Name:</strong>
-                          <span className="line">&nbsp;</span>
-                          <strong>Date:</strong>
-                          <span className="line" style={{flex: 'none', width: 160}}>&nbsp;</span>
-                        </div>
-                        {/* Title — always visible */}
-                        <div className="ws-title">
-                          <h1>Mad Minutes</h1>
-                          <div className="subtitle">{subtitleText()}</div>
-                        </div>
-                      </div>
-
-                      {/* 5×5 grid */}
-                      <div className="problem-grid">
-                        {pageProblems.map((p, localIdx) => {
-                          const i        = pi * 25 + localIdx;
-                          const checked   = phase === 'checked';
-                          const ansInt    = parseInt(answers[i], 10);
-                          const isCorrect = checked && answers[i] !== '' && ansInt === p.answer;
-                          const isWrong   = checked && !isCorrect;
-
-                          return (
-                            <div key={i} className={`problem-cell ${isCorrect ? 'cell-correct' : isWrong ? 'cell-incorrect' : ''}`}>
-                              <div className="p-number">{p.top}</div>
-                              <div className="p-operator-row">
-                                <span>{p.sym}</span>
-                                <span>{p.bottom}</span>
-                              </div>
-                              <hr className="p-divider" />
-                              <input
-                                ref={el => inputRefs.current[i] = el}
-                                type="text"
-                                inputMode="numeric"
-                                className="answer-input"
-                                value={answers[i]}
-                                disabled={checked}
-                                onKeyDown={e => onKeyDown(e, i)}
-                                onChange={e => onAnswerChange(e, i)}
-                                aria-label={`Problem ${i + 1}`}
-                                autoComplete="off"
-                              />
-                              {isWrong && (
-                                <div className="correct-answer-hint">{p.answer}</div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Seed footer — print only */}
-                      <div className="ws-seed-footer">
-                        {'Seed: ' + cfg.seed}
-                        {pageCount > 1 && (' · Page ' + (pi + 1) + ' of ' + pageCount)}
-                      </div>
-
-                    </div>
-                  </React.Fragment>
+                  renderWorksheetPage(pageProblems, pi)
                 ))}
+                {view !== 'answers' && (
+                  <div className="answer-key-print">
+                    {pageGroups.map((pageProblems, pi) => renderWorksheetPage(pageProblems, pi, true))}
+                  </div>
+                )}
               </div>
             </>
           )}
