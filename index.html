@@ -190,7 +190,7 @@
       display: none;
       text-align: right;
       font-family: 'Courier New', Courier, monospace;
-      font-size: .72rem;
+      font-size: 1.72rem;
       color: #888;
       margin-top: 10px;
     }
@@ -203,7 +203,7 @@
     .ws-answer-qr {
       margin-top: 18px;
       font-family: Arial, sans-serif;
-      font-size: .78rem;
+      font-size: 1.78rem;
       color: #222;
     }
 
@@ -218,17 +218,25 @@
       text-align: right;
       font-weight: 700;
       line-height: 1.15;
+      display:none;
     }
 
     .ws-answer-qr img {
-      width: 168px;
-      height: 168px;
+      width: 252px;
+      height: 252px;
     }
 
     /* ── Print ── */
     @media print {
-      body { background: white; }
-      .no-print { display: none !important; }
+      html,
+      body {
+        background: white;
+        overflow: visible !important;
+        padding-right: 0 !important;
+      }
+      .no-print,
+      .modal,
+      .modal-backdrop { display: none !important; }
 
       .worksheet {
         box-shadow: none;
@@ -268,7 +276,7 @@
       .print-with-qr .worksheet {
         box-sizing: border-box;
         min-height: 10in;
-        padding-bottom: 1.95in;
+        padding-bottom: 2.95in;
       }
       .print-with-qr .ws-seed-footer {
         position: absolute;
@@ -430,6 +438,13 @@
       return p.get('view') === 'answers' ? 'answers' : 'worksheet';
     }
 
+    function parsePageParam(maxPages = 1) {
+      const p = new URLSearchParams(window.location.hash.slice(1));
+      const page = parseInt(p.get('page'), 10);
+      if (isNaN(page)) return 1;
+      return Math.max(1, Math.min(Math.max(1, maxPages), page));
+    }
+
     function encodeHash(cfg) {
       const p = new URLSearchParams();
       Object.entries(cfg).forEach(([k, v]) => p.set(k, String(v)));
@@ -445,7 +460,7 @@
       return url.toString();
     }
 
-    function makeAnswerUrl(cfg) {
+    function makeAnswerUrl(cfg, page = 1) {
       const url = new URL(window.location.href);
       const def = DEFAULTS[cfg.op] || DEFAULTS.add;
       const p = new URLSearchParams();
@@ -458,6 +473,7 @@
       if (cfg.useSumCap || +cfg.sumCap !== +def.sumCap) p.set('sumCap', String(cfg.sumCap));
       if (!!cfg.noCarry !== !!def.noCarry) p.set('noCarry', String(!!cfg.noCarry));
       p.set('view', 'answers');
+      p.set('page', String(Math.max(1, Math.min(cfg.pages || 1, page))));
       url.hash = p.toString();
       return url.toString();
     }
@@ -564,7 +580,7 @@
       const [endTime,        setEndTime]        = React.useState(null);
       const [view,           setView]           = React.useState(() => parseView());
       const [printMode,      setPrintMode]      = React.useState('none');
-      const [answerQrUrl,    setAnswerQrUrl]    = React.useState('');
+      const [answerQrUrls,   setAnswerQrUrls]   = React.useState({});
       const [printError,     setPrintError]     = React.useState('');
 
       const modalRef      = React.useRef(null);
@@ -634,15 +650,22 @@
       /* ── Sync cfg → hash ── */
       React.useEffect(() => {
         const nextParams = new URLSearchParams(encodeHash(cfg));
-        if (view === 'answers') nextParams.set('view', 'answers');
+        if (view === 'answers') {
+          nextParams.set('view', 'answers');
+          nextParams.set('page', String(parsePageParam(cfg.pages || 1)));
+        }
         const next = nextParams.toString();
         if (window.location.hash.slice(1) !== next) window.location.hash = next;
       }, [cfg, view]);
 
       React.useEffect(() => {
         if (phase === 'idle') return;
-        const url = makeAnswerUrl(cfg);
-        makeAnswerQr(url).then(setAnswerQrUrl);
+        const pages = cfg.pages || 1;
+        Promise.all(
+          Array.from({ length: pages }, (_, i) =>
+            makeAnswerQr(makeAnswerUrl(cfg, i + 1)).then(dataUrl => [i, dataUrl])
+          )
+        ).then(entries => setAnswerQrUrls(Object.fromEntries(entries)));
       }, [cfg, phase, view]);
 
       React.useEffect(() => {
@@ -768,37 +791,47 @@
       }
 
       async function doPrint(mode) {
-        let nextAnswerQrUrl = answerQrUrl;
+        let nextAnswerQrUrls = answerQrUrls;
         if (mode === 'qr') {
-          const answerUrl = makeAnswerUrl(cfg);
-          if (!isShareableUrl(answerUrl)) {
+          const answerUrls = Array.from({ length: cfg.pages || 1 }, (_, i) => makeAnswerUrl(cfg, i + 1));
+          if (!answerUrls.every(isShareableUrl)) {
             setPrintError('QR codes require this page to be opened from an http or https URL. A local file URL cannot open on your phone.');
             return;
           }
-          if (!answerQrUrl) {
-            nextAnswerQrUrl = await makeAnswerQr(answerUrl);
+          const hasAllQrUrls = answerUrls.every((_, i) => !!answerQrUrls[i]);
+          if (!hasAllQrUrls) {
+            const entries = await Promise.all(
+              answerUrls.map((url, i) => makeAnswerQr(url).then(dataUrl => [i, dataUrl]))
+            );
+            nextAnswerQrUrls = Object.fromEntries(entries);
           }
-          if (!nextAnswerQrUrl) {
+          if (!answerUrls.every((_, i) => !!nextAnswerQrUrls[i])) {
             setPrintError('Could not generate the QR code. Use Answer Sheet or Worksheet Only.');
             return;
           }
         }
         ReactDOM.flushSync(() => {
-          if (nextAnswerQrUrl !== answerQrUrl) setAnswerQrUrl(nextAnswerQrUrl);
+          if (nextAnswerQrUrls !== answerQrUrls) setAnswerQrUrls(nextAnswerQrUrls);
           setPrintMode(mode);
         });
-        if (mode === 'qr' && nextAnswerQrUrl) {
-          await new Promise(resolve => {
-            const img = new Image();
-            img.onload = resolve;
-            img.onerror = resolve;
-            img.src = nextAnswerQrUrl;
-          });
+        if (mode === 'qr') {
+          await Promise.all(Object.values(nextAnswerQrUrls).map(dataUrl =>
+            new Promise(resolve => {
+              const img = new Image();
+              img.onload = resolve;
+              img.onerror = resolve;
+              img.src = dataUrl;
+            })
+          ));
         }
         document.body.classList.toggle('print-with-qr', mode === 'qr');
         document.body.classList.toggle('print-with-answers', mode === 'answers');
         bsPrintModal.current?.hide();
-        setTimeout(() => window.print(), 150);
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
+        setTimeout(() => window.print(), 250);
       }
 
       /* ── Check answers ── */
@@ -857,6 +890,10 @@
       const pageGroups = Array.from({ length: pageCount }, (_, pi) =>
         problems.slice(pi * 25, (pi + 1) * 25)
       );
+      const answerViewPage = parsePageParam(pageCount);
+      const visiblePageGroups = view === 'answers'
+        ? [[pageGroups[answerViewPage - 1] || [], answerViewPage - 1]]
+        : pageGroups.map((pageProblems, pi) => [pageProblems, pi]);
 
       function subtitleText() {
         if (cfg.op === 'div')
@@ -875,7 +912,9 @@
               </div>
             )}
 
-            <div className={`worksheet ${answerSheet || view === 'answers' ? 'answer-sheet' : ''} ${pi > 0 || answerSheet ? 'print-page-break' : ''}`}>
+            <div
+              id={!answerSheet ? `worksheet-page-${pi + 1}` : undefined}
+              className={`worksheet ${answerSheet || view === 'answers' ? 'answer-sheet' : ''} ${pi > 0 || answerSheet ? 'print-page-break' : ''}`}>
 
               <div className="worksheet-header">
                 <div className="ws-name-date">
@@ -942,9 +981,9 @@
                 <div className="ws-answer-qr">
                   <div className="ws-answer-qr-inner">
                     <div className="ws-answer-qr-label">
-                      Answer<br />key
+                      Page {pi + 1}<br />answers
                     </div>
-                    {answerQrUrl && <img src={answerQrUrl} alt="Answer key QR code" />}
+                    {answerQrUrls[pi] && <img src={answerQrUrls[pi]} alt={`Page ${pi + 1} answer key QR code`} />}
                   </div>
                 </div>
               )}
@@ -1323,7 +1362,7 @@
 
               {/* Worksheets (one per page) */}
               <div className="container-xl px-3 py-3 pb-5">
-                {pageGroups.map((pageProblems, pi) => (
+                {visiblePageGroups.map(([pageProblems, pi]) => (
                   renderWorksheetPage(pageProblems, pi)
                 ))}
                 {view !== 'answers' && (
