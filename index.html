@@ -84,11 +84,12 @@
     /* ── Problem grid ── */
     .problem-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
     }
 
     .problem-cell {
+      min-width: 0;
       border: 1.5px solid #adb5bd;
       border-radius: 6px;
       padding: 10px 14px 8px;
@@ -148,6 +149,46 @@
       text-align: right;
       line-height: 1;
       margin-top: 1px;
+    }
+
+    /* ── Mobile worksheet ── */
+    @media screen and (max-width: 575.98px) {
+      .action-bar {
+        gap: 6px;
+        padding: 8px;
+      }
+
+      .container-xl {
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+      }
+
+      .worksheet {
+        width: 100%;
+        padding: 14px 5px 16px;
+      }
+
+      .worksheet-header { margin-bottom: 10px; }
+      .ws-title h1 { font-size: 1.7rem; }
+      .ws-title .subtitle { font-size: .72rem; }
+
+      .problem-grid { gap: 4px; }
+
+      .problem-cell {
+        min-height: 96px;
+        padding: 6px 4px 4px;
+        font-size: clamp(1rem, 4.8vw, 1.2rem);
+      }
+
+      .answer-input,
+      .answer-value { font-size: 1.2em; }
+
+      .p-divider { margin: 3px 0 2px; }
+
+      .page-sep {
+        gap: 8px;
+        margin: 20px 0;
+      }
     }
 
     /* ── Timer bar ── */
