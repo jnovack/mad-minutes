@@ -190,7 +190,7 @@
       display: none;
       text-align: right;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 1.72rem;
+      font-size: .72rem;
       color: #888;
       margin-top: 10px;
     }
@@ -201,29 +201,30 @@
     }
 
     .ws-answer-qr {
-      margin-top: 18px;
+      margin-top: 12px;
       font-family: Arial, sans-serif;
-      font-size: 1.78rem;
+      font-size: .72rem;
       color: #222;
+      break-inside: avoid;
     }
 
     .ws-answer-qr-inner {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
+      justify-content: center;
+      gap: 5px;
     }
 
     .ws-answer-qr-label {
-      text-align: right;
+      text-align: center;
       font-weight: 700;
-      line-height: 1.15;
-      display:none;
+      line-height: 1.2;
     }
 
     .ws-answer-qr img {
-      width: 252px;
-      height: 252px;
+      width: 144px;
+      height: 144px;
     }
 
     /* ── Print ── */
@@ -275,21 +276,15 @@
       .print-with-qr .ws-answer-qr { display: block; }
       .print-with-qr .worksheet {
         box-sizing: border-box;
-        min-height: 10in;
-        padding-bottom: 2.95in;
+        break-inside: avoid;
       }
-      .print-with-qr .ws-seed-footer {
-        position: absolute;
-        left: 0;
-        bottom: 0;
-        text-align: left;
-        max-width: calc(100% - 190px);
+      .print-with-qr .problem-grid { gap: 6px; }
+      .print-with-qr .problem-cell {
+        min-height: 94px;
+        padding: 5px 10px 3px;
+        font-size: 1.35rem;
       }
-      .print-with-qr .ws-answer-qr {
-        position: absolute;
-        right: 0;
-        bottom: 0;
-      }
+      .print-with-qr .ws-seed-footer { display: none; }
     }
 
     .print-page-break { break-before: page; }
@@ -904,6 +899,7 @@
       }
 
       function renderWorksheetPage(pageProblems, pi, answerSheet = false) {
+        const startsNewPrintPage = answerSheet || (view !== 'answers' && pi > 0);
         return (
           <React.Fragment key={`${answerSheet ? 'answers' : 'worksheet'}-${pi}`}>
             {pi > 0 && !answerSheet && (
@@ -914,7 +910,7 @@
 
             <div
               id={!answerSheet ? `worksheet-page-${pi + 1}` : undefined}
-              className={`worksheet ${answerSheet || view === 'answers' ? 'answer-sheet' : ''} ${pi > 0 || answerSheet ? 'print-page-break' : ''}`}>
+              className={`worksheet ${answerSheet || view === 'answers' ? 'answer-sheet' : ''} ${startsNewPrintPage ? 'print-page-break' : ''}`}>
 
               <div className="worksheet-header">
                 <div className="ws-name-date">
@@ -980,10 +976,10 @@
               {!answerSheet && view !== 'answers' && (
                 <div className="ws-answer-qr">
                   <div className="ws-answer-qr-inner">
-                    <div className="ws-answer-qr-label">
-                      Page {pi + 1}<br />answers
-                    </div>
                     {answerQrUrls[pi] && <img src={answerQrUrls[pi]} alt={`Page ${pi + 1} answer key QR code`} />}
+                    <div className="ws-answer-qr-label">
+                      Answers · Seed {cfg.seed} · Page {pi + 1} of {pageCount}
+                    </div>
                   </div>
                 </div>
               )}
